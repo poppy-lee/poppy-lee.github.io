@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <style>
+      html {
+        height: 100%;
+        overflow: hidden;
+      }
+      body {
+        display: flex;
+        position: relative;
+        flex-direction: column;
+        height: 100%;
+        margin: 0;
+        overflow: auto;
+        /* set overscroll-behavior: contain */
+        /* "no scroll chaining occurs on neighboring scrolling areas" */
+        /* Chrome 63 / Edge 79 / Firefox 59 / Safari 16 */
+        /* https://developer.mozilla.org/en-US/docs/Web/CSS/overscroll-behavior#contain */
+        overscroll-behavior: contain;
+      }
+      main {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        /* make scrollable */
+        /* https://channel.io/ko/blog/articles/cross-browsing-ios15-12bccbc3 */
+        height: calc(100% + 1px);
+      }
+
+      #history {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        opacity: 0;
+        pointer-events: none;
+        overflow: auto;
+        overscroll-behavior: contain;
+      }
+      body:has(input[name="show-history"]:checked) #history {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      #overlay-hero {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        top: 0;
+        left: 0;
+        background-color: white;
+      }
+      body:has(input[name="show-history"]:checked) #overlay-hero {
+        visibility: hidden;
+      }
+
+      #overlay-input {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        top: 0;
+        left: 0;
+        background-color: white;
+        border: 4px solid red;
+        box-sizing: border-box;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+      }
+      #overlay-input:has(textarea:focus) {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      #overlay-input header {
+        width: 100%;
+        height: 56px;
+      }
+      #overlay-input textarea {
+        width: 100%;
+        height: 56px;
+        box-sizing: border-box;
+      }
+
+      footer {
+        position: sticky;
+        width: 100%;
+        left: 0;
+        bottom: 0;
+        border: 4px solid blue;
+        box-sizing: border-box;
+        transform: translateY(0px);
+        transition: transform 0.2s ease;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>header</header>
+      <section id="history">
+        <ul>
+          <li>question 1</li>
+          <li>answer 1</li>
+          <li>answer 1</li>
+          <li>answer 1</li>
+          <li>answer 1</li>
+          <li>answer 1</li>
+          <li>answer 1</li>
+          <li>answer 1</li>
+          <li>answer 1</li>
+          <li>answer 1</li>
+          <li>answer 1</li>
+        </ul>
+        <ul>
+          <li>question 2</li>
+          <li>answer 2</li>
+          <li>answer 2</li>
+          <li>answer 2</li>
+          <li>answer 2</li>
+          <li>answer 2</li>
+          <li>answer 2</li>
+          <li>answer 2</li>
+          <li>answer 2</li>
+          <li>answer 2</li>
+          <li>answer 2</li>
+        </ul>
+        <ul>
+          <li>question 3</li>
+          <li>answer 3</li>
+          <li>answer 3</li>
+          <li>answer 3</li>
+          <li>answer 3</li>
+          <li>answer 3</li>
+          <li>answer 3</li>
+          <li>answer 3</li>
+          <li>answer 3</li>
+          <li>answer 3</li>
+          <li>answer 3</li>
+        </ul>
+        <ul>
+          <li>question 4</li>
+          <li>answer 4</li>
+          <li>answer 4</li>
+          <li>answer 4</li>
+          <li>answer 4</li>
+          <li>answer 4</li>
+          <li>answer 4</li>
+          <li>answer 4</li>
+          <li>answer 4</li>
+          <li>answer 4</li>
+          <li>answer 4</li>
+        </ul>
+      </section>
+
+      <section id="overlay-hero">
+        <header>hero header</header>
+        hero content
+      </section>
+
+      <section id="overlay-input" class="hidden">
+        <header>
+          overlay header
+          <button id="button-blur">close()</button>
+        </header>
+        <textarea>textarea</textarea>
+        <ul>
+          <li>faq 1</li>
+          <li>faq 2</li>
+          <li>faq 3</li>
+        </ul>
+      </section>
+
+      <footer>
+        bottom fixed footer
+        <button id="button-focus">open()</button>
+        <label>
+          show history
+          <input type="checkbox" name="show-history" />
+        </label>
+      </footer>
+    </main>
+    <script>
+      const textarea = document.querySelector("#overlay-input textarea");
+      const buttonBlur = document.querySelector("#button-blur");
+      const buttonFocus = document.querySelector("#button-focus");
+
+      buttonFocus.addEventListener("click", () => {
+        textarea.focus();
+      });
+      buttonBlur.addEventListener("click", () => {
+        textarea.blur();
+      });
+
+      const footer = document.querySelector("footer");
+
+      let viewportHeightMax = window.innerHeight;
+      let viewportHeightMin = viewportHeightMax;
+      window.addEventListener("resize", () => {
+        console.log("window resize", { height: window.innerHeight });
+        viewportHeightMax = window.innerHeight;
+      });
+
+      /**
+       * adjust footer position using visualViewport API
+       * Chrome 62 / Edge 79 / Firefox 91 / Safari 13
+       * https://developer.mozilla.org/en-US/docs/Web/API/VisualViewport
+       * https://developer.mozilla.org/en-US/docs/Web/API/VisualViewport/resize_event
+       */
+      window.visualViewport?.addEventListener("resize", () => {
+        console.log("window.visualViewport resize", {
+          height: window.visualViewport.height,
+        });
+
+        if (window.visualViewport.scale !== 1) {
+          // prevent "resize" events from pinch zoom gesture
+          return;
+        }
+        viewportHeightMin = window.visualViewport.height;
+        const translateY = viewportHeightMin - viewportHeightMax;
+        footer.style.transform = `translateY(${translateY}px)`;
+      });
+
+      textarea.addEventListener("focus", () => {
+        console.log("textarea focus");
+        const translateY = viewportHeightMin - viewportHeightMax;
+        footer.style.transform = `translateY(${translateY}px)`;
+      });
+      textarea.addEventListener("blur", () => {
+        console.log("textarea blur");
+        footer.style.transform = "translateY(0px)";
+      });
+    </script>
+  </body>
+</html>
