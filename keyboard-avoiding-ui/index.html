@@ -24,11 +24,15 @@
         /* https://developer.mozilla.org/en-US/docs/Web/CSS/overscroll-behavior#contain */
         overscroll-behavior: contain;
       }
+
       main {
         position: relative;
         display: flex;
         flex-direction: column;
-        /* make scrollable */
+        height: 100%;
+      }
+      main:has(#overlay-input textarea:focus) {
+        /* make scrollable for iOS Safari */
         /* https://channel.io/ko/blog/articles/cross-browsing-ios15-12bccbc3 */
         height: calc(100% + 1px);
       }
