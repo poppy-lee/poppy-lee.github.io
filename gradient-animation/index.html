@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content"
+    />
+    <style>
+      html {
+        display: flex;
+        height: 100%;
+        overflow: hidden;
+      }
+      body {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        justify-content: flex-end;
+        margin: 0;
+        background-color: #dddddd;
+        overflow: hidden;
+      }
+      .bottom-sheet {
+        position: relative;
+        display: flex;
+        flex: 0 0 50%;
+        flex-direction: column;
+        width: 100%;
+      }
+      .background-gradient-container {
+        display: flex;
+        flex-direction: column;
+        width: 105%;
+        height: 140px;
+        top: -4px;
+        left: -2.5%;
+        border-top-left-radius: 28px;
+        border-top-right-radius: 28px;
+        overflow: hidden;
+        filter: blur(12px);
+      }
+      .background-gradient {
+        display: flex;
+        flex-direction: column;
+        width: 300%;
+        height: 100%;
+        background: linear-gradient(
+          90deg,
+          #ff8787 0%,
+          #63ffdc 25%,
+          #385afc 50%,
+          #ff75ff 75%,
+          #ff8787 100%
+        );
+        background-repeat: repeat-x;
+        background-size: 50% 100%;
+        opacity: 0.4;
+
+        transform: translate3d(0px, 0px, 0px);
+        transition: filter 0.4s ease;
+        will-change: transform, filter;
+
+        animation: gradient-animation 10s linear infinite;
+        animation-fill-mode: both;
+      }
+      @keyframes gradient-animation {
+        0% {
+          transform: translate3d(0%, 0px, 0px);
+        }
+        100% {
+          transform: translate3d(-50%, 0px, 0px);
+        }
+      }
+      .background {
+        position: absolute;
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+            180deg,
+            rgba(255, 255, 255, 0.5) 0%,
+            rgba(255, 255, 255, 1) 110px,
+            rgba(255, 255, 255, 1) 110px
+          ),
+          linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0.7) 0%,
+            rgba(255, 255, 255, 0.15) 15%,
+            rgba(255, 255, 255, 0.15) 85%,
+            rgba(255, 255, 255, 0.7) 100%
+          );
+        backdrop-filter: blur(12px);
+        border: 1px solid white;
+        border-top-left-radius: 20px;
+        border-top-right-radius: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bottom-sheet">
+      <div class="background-gradient-container">
+        <div class="background-gradient"></div>
+      </div>
+      <div class="background"></div>
+    </div>
+  </body>
+</html>
