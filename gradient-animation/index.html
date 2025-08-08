@@ -28,6 +28,7 @@
         width: 100%;
       }
       .background-gradient-container {
+        position: relative;
         display: flex;
         flex-direction: column;
         width: 105%;
@@ -40,6 +41,7 @@
         filter: blur(12px);
       }
       .background-gradient {
+        position: absolute;
         display: flex;
         flex-direction: column;
         width: 300%;
@@ -61,7 +63,6 @@
         will-change: transform, filter;
 
         animation: gradient-animation 10s linear infinite;
-        animation-fill-mode: both;
       }
       @keyframes gradient-animation {
         0% {
