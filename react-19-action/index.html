@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content"
+    />
+    <title>react@19 useActionState</title>
+  </head>
+  <body>
+    <h1>test useActionState handling execution order</h1>
+    <a
+      href="https://react.dev/reference/react/useTransition#my-state-updates-in-transitions-are-out-of-order"
+      target="_blank"
+    >
+      useTransition#my-state-updates-in-transitions-are-out-of-order
+    </a>
+    <main id="app"></main>
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "https://esm.sh/react@19.1.0",
+          "react-dom/": "https://esm.sh/react-dom@19.1.0/"
+        }
+      }
+    </script>
+    <script type="module">
+      import { createElement, startTransition, useActionState } from "react"; // → https://esm.sh/react@19.1.0
+      import { createRoot } from "react-dom/client"; // → https://esm.sh/react-dom@19.1.0/client
+
+      const root = createRoot(document.getElementById("app"));
+      root.render(createElement(App));
+
+      function App() {
+        const [counter, increase, isPending] = useActionState(
+          async (counter) => {
+            await new Promise((resolve) => {
+              setTimeout(resolve, counter % 2 ? 1000 : 500);
+            });
+            console.log("next counter:", counter + 1);
+            return counter + 1;
+          },
+          0
+        );
+
+        return createElement(
+          "div",
+          null,
+          createElement("p", null, `count: ${counter}`),
+          createElement(
+            "button",
+            {
+              onClick: () => {
+                startTransition(() => {
+                  increase();
+                });
+              },
+            },
+            `increase() timeout ${counter % 2 ? 1000 : 500}ms ${
+              isPending ? "(pendiing)" : ""
+            }`
+          )
+        );
+      }
+    </script>
+  </body>
+</html>
