@@ -98,7 +98,7 @@
         return (
           <>
             <p>On parentState update, reset childState during render</p>
-            <p style={{ whiteSpace: "pre-line" }}>
+            <p style={{ whiteSpace: "pre" }}>
               <code>
                 {`if (parentState !== parentStateRef.current) {
   parentStateRef.current = parentState;
@@ -132,7 +132,7 @@
         return (
           <>
             <p>On parentState update, reset childState in an effect</p>
-            <p style={{ whiteSpace: "pre-line" }}>
+            <p style={{ whiteSpace: "pre" }}>
               <code>
                 {`useEffect(() => {
   setChildState(0);
