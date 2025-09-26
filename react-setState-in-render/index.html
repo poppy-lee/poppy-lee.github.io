@@ -13,125 +13,130 @@
         "imports": {
           "react": "https://esm.sh/react@19.1.0",
           "react-dom/client": "https://esm.sh/react-dom@19.1.0/client",
-          "react/jsx-runtime": "https://esm.sh/react@19/jsx-runtime"
+          "react/jsx-runtime": "https://esm.sh/react@19.1.0/jsx-runtime"
         }
       }
     </script>
   </head>
   <body>
-    <h1>react setState in render</h1>
+    <h1>react setState while render</h1>
     <main id="app"></main>
 
     <script type="text/babel" data-type="module">
-      import React, { useEffect, useState } from "react"; // → https://esm.sh/react@19.1.0
+      import React, { useEffect, useState, useRef } from "react"; // → https://esm.sh/react@19.1.0
       import { createRoot } from "react-dom/client"; // → https://esm.sh/react-dom@19.1.0/client
 
       const root = createRoot(document.getElementById("app"));
       root.render(<App />);
 
       function App() {
-        const [useRederReset, setUseRederReset] = useState(true);
-        const [counter, setCounter] = useState(0);
-
         return (
           <>
-            <p>
-              <label>
-                use reset state on render
-                <input
-                  type="checkbox"
-                  checked={useRederReset}
-                  onChange={(event) => setUseRederReset(event.target.checked)}
-                />
-              </label>
-            </p>
-            <div style={{ padding: 8, border: "1px solid black" }}>
-              <button onClick={() => setCounter((c) => c + 1)}>
-                parent state update: {counter} + 1
-              </button>
-              <div style={{ padding: 8, border: "1px solid black" }}>
-                {useRederReset ? (
-                  <CounterRederReset counter={counter} />
-                ) : (
-                  <CounterEffectReset counter={counter} />
-                )}
-              </div>
-            </div>
+            <h2>setState while render</h2>
+            <Parent Child={ChildRederReset} />
+            <h2>effect</h2>
+            <Parent Child={ChildEffectReset} />
           </>
         );
       }
 
-      function CounterRederReset({ counter }) {
-        const [selected, setSelected] = useState(false);
+      function Parent({ Child }) {
+        const logRef = useRef(null);
+        const [parentState, setParentState] = useState(0);
 
-        // 프롭 변경 감지용 (렌더 중 업데이트)
-        const [prevCounter, setPrevCounter] = useState(counter);
-        if (counter !== prevCounter) {
-          // 상태 변경 즉시 이전버전 폐기
-          setPrevCounter(counter);
-          setSelected(false);
+        return (
+          <div
+            style={{
+              padding: 8,
+              border: "1px solid black",
+              boxSizing: "border-box",
+            }}
+          >
+            <button onClick={() => setParentState((c) => c + 1)}>
+              update parentState: {parentState} + 1
+            </button>
+            <div style={{ padding: 8, border: "1px solid black" }}>
+              <Child
+                parentState={parentState}
+                onUpdate={(message) => {
+                  if (logRef.current) {
+                    logRef.current.innerText += message + "\n";
+                  }
+                }}
+              />
+            </div>
+            <p ref={logRef} style={{ width: "100%" }} />
+          </div>
+        );
+      }
+
+      function ChildRederReset({ parentState, onUpdate }) {
+        const parentStateRef = useRef(parentState);
+        const [childState, setChildState] = useState(0);
+
+        // props 변경을 확인하면 자녀 상태 초기화 (render 중 업데이트)
+        if (parentState !== parentStateRef.current) {
+          // render 중 부모 상태 변경을 감지하면 자녀상태 초기화 수행.
+          // render 중 setChildState를 수행하면 즉시 이전버전을 폐기하고 변경사항이 반영되어 log가 1회만 호출됨.
+          // ChildEffectReset parentState: 1, childState: 0
+          parentStateRef.current = parentState;
+          setChildState(0);
         }
 
-        // selected: true 일 때 props가 업데이트 되면 초기화 되며 아래 로그 출력
-        // CounterRederReset [layoutEffect commit] {counter: 3, selected: false}
-        // CounterRederReset [effect post-commit] {counter: 3, selected: false}
-        React.useLayoutEffect(() => {
-          console.log("CounterRederReset [layoutEffect commit]", {
-            counter,
-            selected,
-          });
-        });
-
-        React.useEffect(() => {
-          console.log("CounterRederReset [effect post-commit]", {
-            counter,
-            selected,
-          });
+        useEffect(() => {
+          onUpdate(
+            `ChildRederReset parentState: ${parentState}, childState: ${childState}`
+          );
         });
 
         return (
           <>
-            <button onClick={() => setSelected(true)}>select</button>
-            <span data-testid="status">
-              {selected ? "선택됨" : "선택 안됨"}
-            </span>
+            <p>parentState 업데이트 시 render 중 초기화 수행</p>
+            <p style={{ whiteSpace: "pre-line" }}>
+              <code>
+                {`if (parentState !== parentStateRef.current) {
+                    parentStateRef.current = parentState;
+                    setChildState(0);
+                  }`}
+              </code>
+            </p>
+            <button onClick={() => setChildState((state) => state + 1)}>
+              update childState: {childState} + 1
+            </button>
           </>
         );
       }
 
-      function CounterEffectReset({ counter }) {
-        const [selected, setSelected] = useState(false);
+      function ChildEffectReset({ parentState, onUpdate }) {
+        const [childState, setChildState] = useState(0);
 
-        // props 변경에 반응해 이펙트에서 리셋 (커밋 후)
+        // props 변경에 반응해 이펙트에서 리셋 (커밋 후 업데이트)
         useEffect(() => {
-          setSelected(false);
-        }, [counter]);
+          setChildState(0);
+        }, [parentState]);
 
-        // selected: true 일 때 props가 업데이트 되면 초기화 되며 아래 로그 출력
-        // CounterEffectReset [layoutEffect commit] {counter: 2, selected: true}
-        // CounterEffectReset [effect post-commit] {counter: 2, selected: true}
-        // CounterEffectReset [layoutEffect commit] {counter: 2, selected: false}
-        // CounterEffectReset [effect post-commit] {counter: 2, selected: false}
-        React.useLayoutEffect(() => {
-          console.log("CounterEffectReset [layoutEffect commit]", {
-            counter,
-            selected,
-          });
-        });
-
-        React.useEffect(() => {
-          console.log("CounterEffectReset [effect post-commit]", {
-            counter,
-            selected,
-          });
+        useEffect(() => {
+          // props 변경 시 1회, childState 초기화 시 1회 로그 출력됨.
+          // ChildEffectReset parentState: 1, childState: 1
+          // ChildEffectReset parentState: 1, childState: 0
+          onUpdate(
+            `ChildEffectReset parentState: ${parentState}, childState: ${childState}`
+          );
         });
 
         return (
           <>
-            <button onClick={() => setSelected(true)}>select</button>
-            <span data-testid="status">
-              {selected ? "선택됨" : "선택 안됨"}
-            </span>
+            <p>parentState 업데이트 시 effect 에서 초기화 수행</p>
+            <p style={{ whiteSpace: "pre-line" }}>
+              <code>
+                {`useEffect(() => {
+                    setChildState(0);
+                  }, [parentState]);`}
+              </code>
+            </p>
+            <button onClick={() => setChildState((state) => state + 1)}>
+              update childState: {childState} + 1
+            </button>
           </>
         );
       }
