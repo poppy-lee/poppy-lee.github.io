@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content"
+    />
+    <title>react@19.2 &lt;Activity /&gt;</title>
+
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "https://esm.sh/react@19.2.0",
+          "react-dom/client": "https://esm.sh/react-dom@19.2.0/client",
+          "react/jsx-runtime": "https://esm.sh/react@19.2.0/jsx-runtime"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <h1>react@19.2 &lt;Activity /&gt;</h1>
+    <a href="https://react.dev/reference/react/Activity" target="_blank">
+      reference/react/Activity
+    </a>
+    <main id="app"></main>
+
+    <script type="text/babel" data-type="module">
+      import React, { Activity, useEffect, useState, useRef } from "react";
+      import { createRoot } from "react-dom/client";
+
+      const root = createRoot(document.getElementById("app"));
+      root.render(<App />);
+
+      function App() {
+        const [activePage, setActivePage] = useState("1");
+
+        return (
+          <article>
+            <select onChange={(event) => setActivePage(event.target.value)}>
+              <option value="1">page1</option>
+              <option value="2">page2</option>
+              <option value="3">page3</option>
+            </select>
+            <RouterWithActivity page={activePage} />
+            <RouterWithConditionalRendering page={activePage} />
+          </article>
+        );
+      }
+
+      function RouterWithActivity({ page }) {
+        return (
+          <section>
+            <h2>RouterWithActivity</h2>
+            <Activity mode={page === "1" ? "visible" : "hidden"}>
+              <Page title="page1" />
+            </Activity>
+            <Activity mode={page === "2" ? "visible" : "hidden"}>
+              <Page title="page2" />
+            </Activity>
+            <Activity mode={page === "3" ? "visible" : "hidden"}>
+              <Page title="page3" />
+            </Activity>
+          </section>
+        );
+      }
+      function RouterWithConditionalRendering({ page }) {
+        return (
+          <section>
+            <h2>RouterWithConditionalRendering</h2>
+            {page === "1" && <Page title="page1" />}
+            {page === "2" && <Page title="page2" />}
+            {page === "3" && <Page title="page3" />}
+          </section>
+        );
+      }
+
+      function Page({ title }) {
+        return (
+          <div>
+            <h3>{title}</h3>
+            <div
+              style={{
+                width: 300,
+                height: 300,
+                border: "1px solid black",
+                overflow: "auto",
+              }}
+            >
+              <div style={{ height: "500%" }}>{title} scroll area</div>
+            </div>
+          </div>
+        );
+      }
+    </script>
+  </body>
+</html>
