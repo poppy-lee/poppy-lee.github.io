@@ -76,15 +76,21 @@
       }
 
       function Page({ title }) {
+        const currentScrollTopRef = useRef(null)
+
         return (
           <div>
             <h3>{title}</h3>
+            <div ref={currentScrollTopRef}>scrollTop: 0px</div>
             <div
               style={{
-                width: 300,
-                height: 300,
+                width: 200,
+                height: 200,
                 border: "1px solid black",
                 overflow: "auto",
+              }}
+              onScroll={(event) => {
+                currentScrollTopRef.current.innerText = `scrollTop: ${event.target.scrollTop}px`
               }}
             >
               <div style={{ height: "500%" }}>{title} scroll area</div>
