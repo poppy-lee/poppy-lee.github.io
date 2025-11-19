@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="ko">
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<title>WebAR Virtual Watch Try-On</title>
+		<style>
+body {
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	background-color: #000;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+				#container {
+					position: relative;
+					width: 100vw;
+					height: 100vh;
+				}
+
+				/* 비디오는 화면 뒤에 숨기거나 캔버스로 그릴 수 있지만, 
+					 여기서는 Three.js 배경으로 처리하거나 투명하게 겹칩니다. */
+				#webcam {
+					position: absolute;
+					top: 0;
+					left: 0;
+					width: 100%;
+					height: 100%;
+					object-fit: cover;
+					transform: scaleX(-1); /* 거울 모드 */
+					z-index: 1;
+				}
+
+				#output_canvas {
+					position: absolute;
+					top: 0;
+					left: 0;
+					width: 100%;
+					height: 100%;
+					z-index: 2;
+					pointer-events: none; /* 캔버스가 클릭을 가로채지 않도록 */
+				}
+
+				#loading {
+					position: absolute;
+					top: 50%;
+					left: 50%;
+					transform: translate(-50%, -50%);
+					color: white;
+					font-size: 1.2rem;
+					background: rgba(0, 0, 0, 0.7);
+					padding: 20px;
+					border-radius: 10px;
+					z-index: 10;
+					text-align: center;
+				}
+
+				.brand-ui {
+					position: absolute;
+					bottom: 30px;
+					left: 0;
+					width: 100%;
+					text-align: center;
+					z-index: 5;
+					color: white;
+					pointer-events: none;
+				}
+
+				.brand-ui h1 {
+					margin: 0;
+					font-weight: 300;
+					letter-spacing: 2px;
+					text-transform: uppercase;
+					font-size: 1.5rem;
+					text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+				}
+
+				.brand-ui p {
+					margin: 5px 0 0;
+					font-size: 0.8rem;
+					opacity: 0.8;
+				}
+		</style>
+
+		<!-- Three.js (Global Load) -->
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+	</head>
+	<body>
+
+		<div id="container">
+			<video id="webcam" autoplay playsinline></video>
+			<canvas id="output_canvas"></canvas>
+
+			<div id="loading">
+				AI 모델 로딩 중...<br>
+				<span style="font-size: 0.8em; opacity: 0.8;">잠시만 기다려주세요.</span>
+			</div>
+
+			<div class="brand-ui">
+				<h1>LUXURY WATCH</h1>
+				<p>Virtual Try-On Experience</p>
+			</div>
+		</div>
+
+		<!-- type="module"을 사용하여 ES6 import 구문을 지원하도록 함 -->
+		<script type="module">
+			// 중요: URL 끝에 +esm을 붙여서 브라우저 호환 ES Module 형식으로 강제합니다.
+			import { FilesetResolver, HandLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/+esm";
+
+				const video = document.getElementById('webcam');
+				const canvas = document.getElementById('output_canvas');
+				const loadingDiv = document.getElementById('loading');
+
+				let handLandmarker = undefined;
+				let webcamRunning = false;
+				let lastVideoTime = -1;
+
+				// Three.js 변수들
+				let scene, camera, renderer;
+				let watchGroup;
+
+				// 보간(Smoothing)을 위한 변수
+				const targetPosition = new THREE.Vector3();
+				const targetQuaternion = new THREE.Quaternion();
+
+				// 초기화 시작
+				window.onload = async function() {
+						try {
+								await initThreeJS();
+								await createHandLandmarker();
+								startWebcam();
+						} catch (error) {
+								console.error(error);
+								loadingDiv.innerHTML = "오류가 발생했습니다.<br>카메라 권한을 확인하거나 로컬 서버(localhost)에서 실행해주세요.";
+						}
+				};
+
+				async function createHandLandmarker() {
+						const vision = await FilesetResolver.forVisionTasks(
+								"https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+						);
+
+						handLandmarker = await HandLandmarker.createFromOptions(vision, {
+								baseOptions: {
+										modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+										delegate: "GPU"
+								},
+								runningMode: "VIDEO",
+								numHands: 1
+						});
+
+						loadingDiv.style.display = "none";
+				}
+
+				function initThreeJS() {
+						// Scene 설정
+						scene = new THREE.Scene();
+
+						// Camera 설정 (Perspective)
+						const aspect = window.innerWidth / window.innerHeight;
+						camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
+						camera.position.z = 20; // 카메라를 뒤로 뺌
+
+						// Renderer 설정
+						renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+						renderer.setSize(window.innerWidth, window.innerHeight);
+						renderer.setPixelRatio(window.devicePixelRatio);
+
+						// 조명 설정
+						const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+						scene.add(ambientLight);
+
+						const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+						dirLight.position.set(5, 10, 7);
+						scene.add(dirLight);
+
+						const spotLight = new THREE.SpotLight(0xffaa00, 2); // 금색 반사를 위한 조명
+						spotLight.position.set(-5, 5, 5);
+						scene.add(spotLight);
+
+						// 3D 시계 모델 생성 (절차적 생성)
+						createProceduralWatch();
+
+						// 초기에는 숨김
+						watchGroup.visible = false;
+
+						// 리사이즈 이벤트
+						window.addEventListener('resize', () => {
+								camera.aspect = window.innerWidth / window.innerHeight;
+								camera.updateProjectionMatrix();
+								renderer.setSize(window.innerWidth, window.innerHeight);
+						});
+				}
+
+				function createProceduralWatch() {
+						watchGroup = new THREE.Group();
+
+						// 재질 설정
+						const goldMaterial = new THREE.MeshStandardMaterial({ 
+								color: 0xffd700, 
+								roughness: 0.3, 
+								metalness: 0.8 
+						});
+						const blackLeatherMat = new THREE.MeshStandardMaterial({ 
+								color: 0x111111, 
+								roughness: 0.9 
+						});
+						const faceMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+						// const glassMaterial = new THREE.MeshPhysicalMaterial({ ... }); // 복잡도 감소를 위해 생략 가능
+
+						// 1. 시계 본체 (Case)
+						const caseGeo = new THREE.CylinderGeometry(1.8, 1.8, 0.4, 32);
+						const watchCase = new THREE.Mesh(caseGeo, goldMaterial);
+						watchCase.rotation.x = Math.PI / 2;
+						watchGroup.add(watchCase);
+
+						// 2. 시계 판 (Dial)
+						const dialGeo = new THREE.CylinderGeometry(1.6, 1.6, 0.42, 32);
+						const dial = new THREE.Mesh(dialGeo, faceMaterial);
+						dial.rotation.x = Math.PI / 2;
+						watchGroup.add(dial);
+
+						// 시계 바늘 (Hands)
+						const hourHandGeo = new THREE.BoxGeometry(0.1, 0.8, 0.05);
+						const hourHand = new THREE.Mesh(hourHandGeo, blackLeatherMat);
+						hourHand.position.z = 0.22;
+						hourHand.rotation.z = Math.PI / 6; // 1시 방향
+						watchGroup.add(hourHand);
+
+						const minHandGeo = new THREE.BoxGeometry(0.08, 1.2, 0.05);
+						const minHand = new THREE.Mesh(minHandGeo, blackLeatherMat);
+						minHand.position.z = 0.22;
+						minHand.rotation.z = -Math.PI / 3; // 10분 방향
+						watchGroup.add(minHand);
+
+						// 3. 스트랩 (Strap) - 위쪽
+						const strapGeo = new THREE.BoxGeometry(1.4, 2.5, 0.2);
+						const upperStrap = new THREE.Mesh(strapGeo, blackLeatherMat);
+						upperStrap.position.y = 2.2;
+						// 손목 곡률을 흉내내기 위해 약간 회전
+						upperStrap.rotation.x = -0.2; 
+						watchGroup.add(upperStrap);
+
+						// 4. 스트랩 (Strap) - 아래쪽
+						const lowerStrap = new THREE.Mesh(strapGeo, blackLeatherMat);
+						lowerStrap.position.y = -2.2;
+						lowerStrap.rotation.x = 0.2;
+						watchGroup.add(lowerStrap);
+
+						// 5. 용두 (Crown)
+						const crownGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.3, 16);
+						const crown = new THREE.Mesh(crownGeo, goldMaterial);
+						crown.position.x = 1.8;
+						crown.rotation.z = Math.PI / 2;
+						watchGroup.add(crown);
+
+						scene.add(watchGroup);
+				}
+
+				function startWebcam() {
+						if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+								const constraints = {
+										video: {
+												facingMode: "user",
+												width: { ideal: 1280 },
+												height: { ideal: 720 }
+										}
+								};
+
+								navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
+										video.srcObject = stream;
+										video.addEventListener('loadeddata', predictWebcam);
+								}).catch((err) => {
+										console.error("카메라 접근 실패:", err);
+										loadingDiv.innerText = "카메라 접근이 거부되었습니다.";
+								});
+						} else {
+								loadingDiv.innerText = "이 브라우저는 카메라를 지원하지 않습니다.";
+						}
+				}
+
+				async function predictWebcam() {
+						if (lastVideoTime !== video.currentTime) {
+								lastVideoTime = video.currentTime;
+
+								// MediaPipe 추론 수행
+								if (handLandmarker) {
+										const startTimeMs = performance.now();
+										const results = handLandmarker.detectForVideo(video, startTimeMs);
+
+										if (results.landmarks && results.landmarks.length > 0) {
+												const landmarks = results.landmarks[0];
+												updateWatchPose(landmarks);
+												watchGroup.visible = true;
+										} else {
+												// 손이 안 보이면 시계를 부드럽게 숨기거나 즉시 숨김
+												 watchGroup.visible = false;
+										}
+								}
+						}
+
+						renderer.render(scene, camera);
+						requestAnimationFrame(predictWebcam);
+				}
+
+				function updateWatchPose(landmarks) {
+						// MediaPipe Landmarks Index:
+						// 0: Wrist (손목)
+						// 5: Index Finger MCP (검지 시작 관절)
+						// 17: Pinky Finger MCP (새끼 시작 관절)
+						// 9: Middle Finger MCP (중지 시작 관절)
+
+						const wrist = landmarks[0];
+						const indexMCP = landmarks[5];
+						const pinkyMCP = landmarks[17];
+						const middleMCP = landmarks[9];
+
+						// 1. 위치 계산 (Position)
+						// 화면 비율
+						const width = window.innerWidth;
+						const height = window.innerHeight;
+
+						// 좌우 반전 (거울 모드) 고려: x 좌표를 1 - x 로 처리
+						const x = (1 - wrist.x) * 2 - 1; 
+						const y = -(wrist.y * 2 - 1); 
+
+						// 깊이(z) 추정 및 보정
+						const p1 = new THREE.Vector3(indexMCP.x, indexMCP.y, 0);
+						const p2 = new THREE.Vector3(pinkyMCP.x, pinkyMCP.y, 0);
+						const handWidth = p1.distanceTo(p2); // 화면상 손 크기
+
+						const vector = new THREE.Vector3(x, y, 0.5); 
+						vector.unproject(camera);
+
+						const dir = vector.sub(camera.position).normalize();
+						const finalPos = camera.position.clone().add(dir.multiplyScalar(18)); // 카메라 앞 고정 거리
+
+						// 보간을 통해 위치 업데이트
+						targetPosition.copy(finalPos);
+						watchGroup.position.lerp(targetPosition, 0.2); // 0.2는 부드러움 정도 (0~1)
+
+						// 2. 회전 계산 (Rotation)
+						// 벡터 V1: 손목 -> 중지 관절 (손이 가리키는 방향, Y축)
+						const v1 = new THREE.Vector3(
+								(1 - middleMCP.x) - (1 - wrist.x),
+								-(middleMCP.y - wrist.y),
+								-(middleMCP.z - wrist.z) * 2 
+						).normalize();
+
+						// 벡터 V2: 검지 -> 새끼 (손바닥 가로 방향, X축)
+						const v2 = new THREE.Vector3(
+								(1 - pinkyMCP.x) - (1 - indexMCP.x),
+								-(pinkyMCP.y - indexMCP.y),
+								-(pinkyMCP.z - indexMCP.z) * 2
+						).normalize();
+
+						// 법선 벡터 (Normal Vector): 손등이 바라보는 방향 (Z축)
+						const normal = new THREE.Vector3().crossVectors(v1, v2).normalize();
+
+						// 시계 모델 기준 축 설정
+						const zAxis = normal;
+						const yAxis = v1;
+						const xAxis = new THREE.Vector3().crossVectors(yAxis, zAxis).normalize();
+
+						const rotationMatrix = new THREE.Matrix4();
+						rotationMatrix.makeBasis(xAxis, yAxis, zAxis);
+
+						targetQuaternion.setFromRotationMatrix(rotationMatrix);
+						watchGroup.quaternion.slerp(targetQuaternion, 0.2); // 회전 보간
+
+						// 손 크기에 따른 스케일 조정 (간단한 버전)
+						const baseScale = 0.8; 
+						watchGroup.scale.set(baseScale, baseScale, baseScale);
+				}
+		</script>
+	</body>
+</html>
+
