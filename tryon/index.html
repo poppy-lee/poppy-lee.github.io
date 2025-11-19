@@ -441,8 +441,8 @@
             
             // 적절한 보정 계수 (Scale Multiplier)
             // 손 너비가 대략 0.1~0.15일 때 스케일이 0.8 정도 나오도록 설정
-            // 0.12 * 6.5 = 0.78
-            const scaleMultiplier = 6.5; 
+            // 기존 6.5 -> 절반 정도인 3.25로 축소
+            const scaleMultiplier = 3.25; 
             const targetScale = handWidth * scaleMultiplier;
 
             // 스케일값 부드럽게 보간 (Lerp)
