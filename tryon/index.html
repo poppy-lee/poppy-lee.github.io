@@ -26,7 +26,6 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
-            /* 초기값은 스크립트에서 제어합니다 (후면: 정방향, 전면: 좌우반전) */
             transform: scaleX(1); 
             z-index: 1;
         }
@@ -81,7 +80,6 @@
             opacity: 0.8;
         }
 
-        /* 카메라 전환 버튼 스타일 */
         #camera-toggle {
             position: absolute;
             top: 20px;
@@ -106,8 +104,7 @@
         }
     </style>
     
-    <!-- Three.js (Global Load) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Three.js (Global Load) --><script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 
@@ -120,7 +117,6 @@
             <span style="font-size: 0.8em; opacity: 0.8;">잠시만 기다려주세요.</span>
         </div>
 
-        <!-- 카메라 전환 버튼 -->
         <button id="camera-toggle" title="카메라 전환">🔄</button>
 
         <div class="brand-ui">
@@ -129,7 +125,6 @@
         </div>
     </div>
 
-    <!-- type="module"을 사용하여 ES6 import 구문을 지원하도록 함 -->
     <script type="module">
         import { FilesetResolver, HandLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/+esm";
 
@@ -141,24 +136,21 @@
         let handLandmarker = undefined;
         let lastVideoTime = -1;
         
-        // 기본 카메라 설정: environment (후면)
         let currentFacingMode = 'environment'; 
 
-        // Three.js 변수들
         let scene, camera, renderer;
         let watchGroup;
-        
+        let occlusionCylinder; // 오클루전 마스크
+
         const targetPosition = new THREE.Vector3();
         const targetQuaternion = new THREE.Quaternion();
         
-        // 초기화 시작
         window.onload = async function() {
             try {
                 await initThreeJS();
                 await createHandLandmarker();
-                startWebcam(); // 초기 실행
+                startWebcam();
                 
-                // 버튼 이벤트 리스너 추가
                 toggleBtn.addEventListener('click', switchCamera);
             } catch (error) {
                 console.error(error);
@@ -166,7 +158,6 @@
             }
         };
 
-        // 카메라 전환 함수
         function switchCamera() {
             currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
             startWebcam();
@@ -212,7 +203,10 @@
             scene.add(spotLight);
 
             createProceduralWatch();
+            createOcclusionMask(); // 오클루전 마스크 생성
+
             watchGroup.visible = false;
+            occlusionCylinder.visible = false; // 시계와 함께 가림 마스크도 숨김
 
             window.addEventListener('resize', () => {
                 camera.aspect = window.innerWidth / window.innerHeight;
@@ -235,16 +229,19 @@
             });
             const faceMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
+            // 시계 본체 (Case)
             const caseGeo = new THREE.CylinderGeometry(1.8, 1.8, 0.4, 32);
             const watchCase = new THREE.Mesh(caseGeo, goldMaterial);
             watchCase.rotation.x = Math.PI / 2;
             watchGroup.add(watchCase);
 
+            // 시계 판 (Dial)
             const dialGeo = new THREE.CylinderGeometry(1.6, 1.6, 0.42, 32);
             const dial = new THREE.Mesh(dialGeo, faceMaterial);
             dial.rotation.x = Math.PI / 2;
             watchGroup.add(dial);
 
+            // 시계 바늘 (Hands)
             const hourHandGeo = new THREE.BoxGeometry(0.1, 0.8, 0.05);
             const hourHand = new THREE.Mesh(hourHandGeo, blackLeatherMat);
             hourHand.position.z = 0.22;
@@ -257,28 +254,49 @@
             minHand.rotation.z = -Math.PI / 3;
             watchGroup.add(minHand);
 
-            const strapGeo = new THREE.BoxGeometry(1.4, 2.5, 0.2);
-            const upperStrap = new THREE.Mesh(strapGeo, blackLeatherMat);
-            upperStrap.position.y = 2.2;
-            upperStrap.rotation.x = -0.2; 
-            watchGroup.add(upperStrap);
-
-            const lowerStrap = new THREE.Mesh(strapGeo, blackLeatherMat);
-            lowerStrap.position.y = -2.2;
-            lowerStrap.rotation.x = 0.2;
-            watchGroup.add(lowerStrap);
-            
+            // 용두 (Crown)
             const crownGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.3, 16);
             const crown = new THREE.Mesh(crownGeo, goldMaterial);
             crown.position.x = 1.8;
             crown.rotation.z = Math.PI / 2;
             watchGroup.add(crown);
 
+            // 시계 스트랩 (더 얇고 손목에 감기는 형태로)
+            // 상단 스트랩 (시계줄 너비 1.4, 길이 3.5, 두께 0.1)
+            const strapUpperGeo = new THREE.CylinderGeometry(0.7, 0.7, 3.5, 16, 1, false, 0, Math.PI); // 반원통
+            const upperStrap = new THREE.Mesh(strapUpperGeo, blackLeatherMat);
+            upperStrap.rotation.z = Math.PI / 2; // 옆으로 눕힘
+            upperStrap.position.set(0, 2.8, 0); // 시계에서 위로 이동
+            watchGroup.add(upperStrap);
+
+            // 하단 스트랩
+            const strapLowerGeo = new THREE.CylinderGeometry(0.7, 0.7, 3.5, 16, 1, false, 0, Math.PI); // 반원통
+            const lowerStrap = new THREE.Mesh(strapLowerGeo, blackLeatherMat);
+            lowerStrap.rotation.z = -Math.PI / 2; // 옆으로 눕힘
+            lowerStrap.position.set(0, -2.8, 0); // 시계에서 아래로 이동
+            watchGroup.add(lowerStrap);
+
             scene.add(watchGroup);
         }
 
+        // 손목을 가리는 오클루전 마스크 생성
+        function createOcclusionMask() {
+            // 손목의 형태를 대략적으로 나타낼 수 있는 얇은 원통
+            const occlusionGeo = new THREE.CylinderGeometry(2, 2, 4, 32); 
+            const occlusionMat = new THREE.MeshBasicMaterial({ 
+                color: 0xff0000, // 디버깅용 빨간색 (실제로는 보이지 않음)
+                colorWrite: false, // 화면에 색상을 그리지 않음
+                depthWrite: true,  // 깊이 버퍼에는 기록하여 뒤의 오브젝트를 가림
+                depthTest: true,
+                transparent: true,
+                opacity: 0 // 실제로는 투명하게
+            });
+            occlusionCylinder = new THREE.Mesh(occlusionGeo, occlusionMat);
+            occlusionCylinder.rotation.x = Math.PI / 2; // 손목에 감기도록 회전
+            scene.add(occlusionCylinder);
+        }
+
         function startWebcam() {
-            // 기존 스트림이 있다면 중지 (카메라 전환 시 필요)
             if (video.srcObject) {
                 const tracks = video.srcObject.getTracks();
                 tracks.forEach(track => track.stop());
@@ -287,15 +305,12 @@
             if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
                 const constraints = {
                     video: {
-                        facingMode: currentFacingMode, // 현재 설정된 카메라 모드 사용
+                        facingMode: currentFacingMode, 
                         width: { ideal: 1280 },
                         height: { ideal: 720 }
                     }
                 };
 
-                // 카메라 모드에 따른 CSS 변환 처리
-                // 전면 카메라(user)는 거울 모드로 좌우 반전 필요
-                // 후면 카메라(environment)는 반전 없이 그대로 표시
                 if (currentFacingMode === 'user') {
                     video.style.transform = "scaleX(-1)";
                 } else {
@@ -326,8 +341,10 @@
                         const landmarks = results.landmarks[0];
                         updateWatchPose(landmarks);
                         watchGroup.visible = true;
+                        occlusionCylinder.visible = true; // 손이 보이면 마스크도 보이게
                     } else {
-                         watchGroup.visible = false;
+                        watchGroup.visible = false;
+                        occlusionCylinder.visible = false; // 손이 없으면 마스크도 숨김
                     }
                 }
             }
@@ -342,26 +359,14 @@
             const pinkyMCP = landmarks[17];
             const middleMCP = landmarks[9];
 
-            // 1. 위치 계산
-            // 미디어파이프 좌표 (0~1)
+            // 1. 위치 계산 (Position)
             let x = wrist.x;
-            
-            // 전면 카메라(거울모드)일 때만 X좌표 반전 계산이 필요함
-            // 후면 카메라는 있는 그대로 사용
             if (currentFacingMode === 'user') {
                 x = 1 - x; 
             }
             
-            // NDC 좌표계로 변환 (-1 ~ 1)
-            // Three.js는 중앙이 (0,0)
             const ndcX = (x * 2) - 1;
-            const ndcY = -(wrist.y * 2 - 1); // Y는 항상 상하 반전 필요 (캔버스 좌표계 vs WebGL 좌표계)
-
-            // 깊이 추정
-            // 전면 카메라와 후면 카메라는 화각 차이로 인해 거리감이 다를 수 있어 보정이 필요할 수 있음
-            const p1 = new THREE.Vector3(indexMCP.x, indexMCP.y, 0);
-            const p2 = new THREE.Vector3(pinkyMCP.x, pinkyMCP.y, 0);
-            const handWidth = p1.distanceTo(p2); 
+            const ndcY = -(wrist.y * 2 - 1); 
             
             const vector = new THREE.Vector3(ndcX, ndcY, 0.5); 
             vector.unproject(camera);
@@ -372,8 +377,7 @@
             targetPosition.copy(finalPos);
             watchGroup.position.lerp(targetPosition, 0.2);
 
-            // 2. 회전 계산
-            // 회전 계산을 위한 X 좌표 처리도 카메라 모드에 따라 달라짐
+            // 2. 회전 계산 (Rotation)
             let wristX = wrist.x;
             let middleX = middleMCP.x;
             let indexX = indexMCP.x;
@@ -386,14 +390,12 @@
                 pinkyX = 1 - pinkyX;
             }
 
-            // 벡터 V1: 손목 -> 중지
             const v1 = new THREE.Vector3(
                 middleX - wristX,
                 -(middleMCP.y - wrist.y),
                 -(middleMCP.z - wrist.z) * 2 
             ).normalize();
 
-            // 벡터 V2: 검지 -> 새끼
             const v2 = new THREE.Vector3(
                 pinkyX - indexX,
                 -(pinkyMCP.y - indexMCP.y),
@@ -412,8 +414,15 @@
             targetQuaternion.setFromRotationMatrix(rotationMatrix);
             watchGroup.quaternion.slerp(targetQuaternion, 0.2);
 
+            // 3. 스케일 조정 (손 크기에 따른)
             const baseScale = 0.8; 
             watchGroup.scale.set(baseScale, baseScale, baseScale);
+
+            // 4. 오클루전 마스크 위치 및 회전 업데이트
+            // 시계와 동일한 위치 및 회전을 공유하도록 설정
+            occlusionCylinder.position.copy(watchGroup.position);
+            occlusionCylinder.quaternion.copy(watchGroup.quaternion);
+            occlusionCylinder.scale.copy(watchGroup.scale);
         }
     </script>
 </body>
