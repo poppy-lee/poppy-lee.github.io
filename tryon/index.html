@@ -104,7 +104,8 @@
         }
     </style>
     
-    <!-- Three.js (Global Load) --><script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Three.js (Global Load) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 
@@ -140,7 +141,7 @@
 
         let scene, camera, renderer;
         let watchGroup;
-        let occlusionCylinder; // 오클루전 마스크
+        let occlusionCylinder; 
 
         const targetPosition = new THREE.Vector3();
         const targetQuaternion = new THREE.Quaternion();
@@ -203,10 +204,10 @@
             scene.add(spotLight);
 
             createProceduralWatch();
-            createOcclusionMask(); // 오클루전 마스크 생성
+            createOcclusionMask(); 
 
             watchGroup.visible = false;
-            occlusionCylinder.visible = false; // 시계와 함께 가림 마스크도 숨김
+            occlusionCylinder.visible = false; 
 
             window.addEventListener('resize', () => {
                 camera.aspect = window.innerWidth / window.innerHeight;
@@ -229,70 +230,95 @@
             });
             const faceMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-            // 시계 본체 (Case)
+            // --- 시계줄 (Strap) ---
+            // 기존의 바(Bar) 형태가 아닌, 손목을 감싸는 원통(Cylinder) 형태로 변경
+            // Y축이 손목 뼈 방향이므로, Cylinder의 높이가 스트랩 너비가 됩니다.
+            const wristRadius = 2.3; // 손목 반지름
+            const strapWidth = 1.6;  // 스트랩 너비
+            
+            // 손목은 타원형이므로 z축 스케일을 줄여서 납작하게 만듦
+            const strapGeo = new THREE.CylinderGeometry(wristRadius, wristRadius, strapWidth, 64, 1, true); 
+            const strap = new THREE.Mesh(strapGeo, blackLeatherMat);
+            // 기본 Cylinder는 Y축 정렬이므로 손목 방향(Y)과 일치. 
+            // 타원형을 위해 스케일 조정 (Z축을 납작하게)
+            strap.scale.set(1, 1, 0.85); 
+            watchGroup.add(strap);
+
+            // --- 시계 본체 (Case) ---
+            // 스트랩 위쪽(Z+)에 위치
+            const caseYOffset = (wristRadius * 0.85); // 타원형 반지름 고려
+            
             const caseGeo = new THREE.CylinderGeometry(1.8, 1.8, 0.4, 32);
             const watchCase = new THREE.Mesh(caseGeo, goldMaterial);
-            watchCase.rotation.x = Math.PI / 2;
+            watchCase.position.set(0, 0, caseYOffset); 
+            watchCase.rotation.x = Math.PI / 2; // 화면을 보게 회전
             watchGroup.add(watchCase);
 
-            // 시계 판 (Dial)
+            // --- 시계 판 (Dial) ---
             const dialGeo = new THREE.CylinderGeometry(1.6, 1.6, 0.42, 32);
             const dial = new THREE.Mesh(dialGeo, faceMaterial);
+            dial.position.set(0, 0, caseYOffset);
             dial.rotation.x = Math.PI / 2;
             watchGroup.add(dial);
 
-            // 시계 바늘 (Hands)
+            // --- 시계 바늘 ---
             const hourHandGeo = new THREE.BoxGeometry(0.1, 0.8, 0.05);
             const hourHand = new THREE.Mesh(hourHandGeo, blackLeatherMat);
-            hourHand.position.z = 0.22;
+            hourHand.position.set(0, 0, caseYOffset + 0.22);
             hourHand.rotation.z = Math.PI / 6;
             watchGroup.add(hourHand);
 
             const minHandGeo = new THREE.BoxGeometry(0.08, 1.2, 0.05);
             const minHand = new THREE.Mesh(minHandGeo, blackLeatherMat);
-            minHand.position.z = 0.22;
+            minHand.position.set(0, 0, caseYOffset + 0.22);
             minHand.rotation.z = -Math.PI / 3;
             watchGroup.add(minHand);
 
-            // 용두 (Crown)
+            // --- 용두 (Crown) ---
             const crownGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.3, 16);
             const crown = new THREE.Mesh(crownGeo, goldMaterial);
-            crown.position.x = 1.8;
+            crown.position.set(1.8, 0, caseYOffset); // X축 방향으로 이동
             crown.rotation.z = Math.PI / 2;
             watchGroup.add(crown);
 
-            // 시계 스트랩 (더 얇고 손목에 감기는 형태로)
-            // 상단 스트랩 (시계줄 너비 1.4, 길이 3.5, 두께 0.1)
-            const strapUpperGeo = new THREE.CylinderGeometry(0.7, 0.7, 3.5, 16, 1, false, 0, Math.PI); // 반원통
-            const upperStrap = new THREE.Mesh(strapUpperGeo, blackLeatherMat);
-            upperStrap.rotation.z = Math.PI / 2; // 옆으로 눕힘
-            upperStrap.position.set(0, 2.8, 0); // 시계에서 위로 이동
-            watchGroup.add(upperStrap);
+            // --- 러그 (Lugs) - 시계와 줄 연결부 ---
+            const lugGeo = new THREE.BoxGeometry(1.0, 0.4, 0.5);
+            
+            const lugTop = new THREE.Mesh(lugGeo, goldMaterial);
+            lugTop.position.set(0, 1.7, caseYOffset - 0.2); // Y축 위쪽
+            lugTop.rotation.x = -0.2;
+            watchGroup.add(lugTop);
 
-            // 하단 스트랩
-            const strapLowerGeo = new THREE.CylinderGeometry(0.7, 0.7, 3.5, 16, 1, false, 0, Math.PI); // 반원통
-            const lowerStrap = new THREE.Mesh(strapLowerGeo, blackLeatherMat);
-            lowerStrap.rotation.z = -Math.PI / 2; // 옆으로 눕힘
-            lowerStrap.position.set(0, -2.8, 0); // 시계에서 아래로 이동
-            watchGroup.add(lowerStrap);
+            const lugBottom = new THREE.Mesh(lugGeo, goldMaterial);
+            lugBottom.position.set(0, -1.7, caseYOffset - 0.2); // Y축 아래쪽
+            lugBottom.rotation.x = 0.2;
+            watchGroup.add(lugBottom);
+
+            // --- 버클 (Clasp) - 뒷면 ---
+            const claspGeo = new THREE.BoxGeometry(1.8, 0.8, 0.2);
+            const clasp = new THREE.Mesh(claspGeo, goldMaterial);
+            clasp.position.set(0, 0, -caseYOffset - 0.1); // 반대편(Z-)
+            // 뒷면이므로 뒤집힘 없음 (Box라 상관없지만)
+            watchGroup.add(clasp);
 
             scene.add(watchGroup);
         }
 
-        // 손목을 가리는 오클루전 마스크 생성
         function createOcclusionMask() {
-            // 손목의 형태를 대략적으로 나타낼 수 있는 얇은 원통
-            const occlusionGeo = new THREE.CylinderGeometry(2, 2, 4, 32); 
+            // 실제 손목을 흉내내는 투명한 원통 (깊이 버퍼만 기록)
+            // 시계줄보다 약간 작게 설정하여 시계줄 안쪽에 위치
+            const occlusionGeo = new THREE.CylinderGeometry(2.2, 2.2, 6, 32); 
             const occlusionMat = new THREE.MeshBasicMaterial({ 
-                color: 0xff0000, // 디버깅용 빨간색 (실제로는 보이지 않음)
-                colorWrite: false, // 화면에 색상을 그리지 않음
-                depthWrite: true,  // 깊이 버퍼에는 기록하여 뒤의 오브젝트를 가림
-                depthTest: true,
-                transparent: true,
-                opacity: 0 // 실제로는 투명하게
+                colorWrite: false, // 화면에 그리지 않음
+                depthWrite: true,  // 깊이값은 기록함 (뒤에 있는 물체를 가림)
+                // depthTest: true, // 기본값
             });
             occlusionCylinder = new THREE.Mesh(occlusionGeo, occlusionMat);
-            occlusionCylinder.rotation.x = Math.PI / 2; // 손목에 감기도록 회전
+            
+            // 손목 형태에 맞춰 타원형으로 스케일 (시계줄과 동일한 비율)
+            occlusionCylinder.scale.set(1, 1, 0.8); 
+            
+            // 오클루전 마스크는 회전하지 않고 손목 뼈 방향(Y)으로 정렬됨 (기본)
             scene.add(occlusionCylinder);
         }
 
@@ -341,10 +367,10 @@
                         const landmarks = results.landmarks[0];
                         updateWatchPose(landmarks);
                         watchGroup.visible = true;
-                        occlusionCylinder.visible = true; // 손이 보이면 마스크도 보이게
+                        occlusionCylinder.visible = true; 
                     } else {
                         watchGroup.visible = false;
-                        occlusionCylinder.visible = false; // 손이 없으면 마스크도 숨김
+                        occlusionCylinder.visible = false; 
                     }
                 }
             }
@@ -359,7 +385,7 @@
             const pinkyMCP = landmarks[17];
             const middleMCP = landmarks[9];
 
-            // 1. 위치 계산 (Position)
+            // 1. 위치 계산
             let x = wrist.x;
             if (currentFacingMode === 'user') {
                 x = 1 - x; 
@@ -377,7 +403,7 @@
             targetPosition.copy(finalPos);
             watchGroup.position.lerp(targetPosition, 0.2);
 
-            // 2. 회전 계산 (Rotation)
+            // 2. 회전 계산
             let wristX = wrist.x;
             let middleX = middleMCP.x;
             let indexX = indexMCP.x;
@@ -390,18 +416,21 @@
                 pinkyX = 1 - pinkyX;
             }
 
+            // Y축: 팔뚝 방향 (손목 -> 중지)
             const v1 = new THREE.Vector3(
                 middleX - wristX,
                 -(middleMCP.y - wrist.y),
                 -(middleMCP.z - wrist.z) * 2 
             ).normalize();
 
+            // X축: 손바닥 가로 방향
             const v2 = new THREE.Vector3(
                 pinkyX - indexX,
                 -(pinkyMCP.y - indexMCP.y),
                 -(pinkyMCP.z - indexMCP.z) * 2
             ).normalize();
 
+            // Z축: 손등 법선 벡터 (화면을 바라보는 방향)
             const normal = new THREE.Vector3().crossVectors(v1, v2).normalize();
             
             const zAxis = normal;
@@ -414,15 +443,17 @@
             targetQuaternion.setFromRotationMatrix(rotationMatrix);
             watchGroup.quaternion.slerp(targetQuaternion, 0.2);
 
-            // 3. 스케일 조정 (손 크기에 따른)
+            // 3. 스케일 조정
             const baseScale = 0.8; 
             watchGroup.scale.set(baseScale, baseScale, baseScale);
 
-            // 4. 오클루전 마스크 위치 및 회전 업데이트
-            // 시계와 동일한 위치 및 회전을 공유하도록 설정
+            // 4. 오클루전 마스크 동기화
             occlusionCylinder.position.copy(watchGroup.position);
             occlusionCylinder.quaternion.copy(watchGroup.quaternion);
-            occlusionCylinder.scale.copy(watchGroup.scale);
+            // 스케일은 초기 설정값을 유지하거나 별도로 관리 (시계줄 안쪽에 있어야 하므로)
+            // 단, 전체적인 손 크기 변화에는 대응해야 하므로 baseScale만 적용
+            // 초기 1, 1, 0.8 비율에 baseScale을 곱함
+            occlusionCylinder.scale.set(baseScale, baseScale, baseScale * 0.8);
         }
     </script>
 </body>
