@@ -145,6 +145,7 @@
 
         const targetPosition = new THREE.Vector3();
         const targetQuaternion = new THREE.Quaternion();
+        let currentScale = 0.8; // 현재 스케일 저장용 (보간을 위해)
         
         window.onload = async function() {
             try {
@@ -192,7 +193,6 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
 
-            // 렌더링 순서 정렬을 활성화 (기본값 true이지만 명시적 확인)
             renderer.sortObjects = true;
 
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -234,12 +234,11 @@
             const faceMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
             // --- 시계줄 (Strap) ---
-            const wristRadius = 2.3; // 손목 반지름
-            const strapWidth = 1.6;  // 스트랩 너비
+            const wristRadius = 2.3; 
+            const strapWidth = 1.6;  
             
             const strapGeo = new THREE.CylinderGeometry(wristRadius, wristRadius, strapWidth, 64, 1, true); 
             const strap = new THREE.Mesh(strapGeo, blackLeatherMat);
-            // 타원형을 위해 스케일 조정
             strap.scale.set(1, 1, 0.85); 
             watchGroup.add(strap);
 
@@ -295,29 +294,21 @@
             // --- 버클 (Clasp) ---
             const claspGeo = new THREE.BoxGeometry(1.8, 0.8, 0.2);
             const clasp = new THREE.Mesh(claspGeo, goldMaterial);
-            clasp.position.set(0, 0, -caseYOffset - 0.1); // 반대편
+            clasp.position.set(0, 0, -caseYOffset - 0.1); 
             watchGroup.add(clasp);
 
             scene.add(watchGroup);
         }
 
         function createOcclusionMask() {
-            // 실제 손목을 흉내내는 투명한 원통
-            // 깊이 버퍼(Depth Buffer)에는 기록되지만 화면에는 보이지 않음
             const occlusionGeo = new THREE.CylinderGeometry(2.2, 2.2, 6, 32); 
             const occlusionMat = new THREE.MeshBasicMaterial({ 
-                colorWrite: false, // 화면에 색상을 그리지 않음
-                depthWrite: true,  // 깊이값은 기록함 (핵심)
+                colorWrite: false, 
+                depthWrite: true,  
                 depthTest: true,
             });
             occlusionCylinder = new THREE.Mesh(occlusionGeo, occlusionMat);
-            
-            // 중요: renderOrder를 -1로 설정하여 다른 모든 물체(기본값 0)보다 먼저 그려지게 함
-            // 이렇게 해야 마스크가 먼저 투명하게 그려지면서 깊이 버퍼를 선점하고,
-            // 그 뒤에 그려지는 시계 부품들이 마스크 뒤에 있을 경우 가려지게 됨.
             occlusionCylinder.renderOrder = -1;
-
-            // 손목 형태 보정 (시계줄보다 약간 안쪽이지만 충분히 채우도록)
             occlusionCylinder.scale.set(1, 1, 0.82); 
             
             scene.add(occlusionCylinder);
@@ -417,21 +408,18 @@
                 pinkyX = 1 - pinkyX;
             }
 
-            // Y축: 팔뚝 방향
             const v1 = new THREE.Vector3(
                 middleX - wristX,
                 -(middleMCP.y - wrist.y),
                 -(middleMCP.z - wrist.z) * 2 
             ).normalize();
 
-            // X축: 손바닥 가로 방향
             const v2 = new THREE.Vector3(
                 pinkyX - indexX,
                 -(pinkyMCP.y - indexMCP.y),
                 -(pinkyMCP.z - indexMCP.z) * 2
             ).normalize();
 
-            // Z축: 손등 법선 벡터
             const normal = new THREE.Vector3().crossVectors(v1, v2).normalize();
             
             const zAxis = normal;
@@ -444,15 +432,29 @@
             targetQuaternion.setFromRotationMatrix(rotationMatrix);
             watchGroup.quaternion.slerp(targetQuaternion, 0.2);
 
-            // 3. 스케일 조정
-            const baseScale = 0.8; 
-            watchGroup.scale.set(baseScale, baseScale, baseScale);
+            // 3. 동적 스케일 조정 (거리 및 손 크기 기반)
+            // 검지(5)와 새끼(17) 기저부 사이의 거리를 측정
+            const distX = indexX - pinkyX;
+            const distY = indexMCP.y - pinkyMCP.y;
+            // 화면상에서의 2D 거리 (손 너비)
+            const handWidth = Math.sqrt(distX * distX + distY * distY);
+            
+            // 적절한 보정 계수 (Scale Multiplier)
+            // 손 너비가 대략 0.1~0.15일 때 스케일이 0.8 정도 나오도록 설정
+            // 0.12 * 6.5 = 0.78
+            const scaleMultiplier = 6.5; 
+            const targetScale = handWidth * scaleMultiplier;
+
+            // 스케일값 부드럽게 보간 (Lerp)
+            currentScale = THREE.MathUtils.lerp(currentScale, targetScale, 0.1);
+
+            watchGroup.scale.set(currentScale, currentScale, currentScale);
 
             // 4. 오클루전 마스크 동기화
             occlusionCylinder.position.copy(watchGroup.position);
             occlusionCylinder.quaternion.copy(watchGroup.quaternion);
-            // 손 크기 변화(baseScale)만 반영하고, 내부 비율(0.82 등)은 유지
-            occlusionCylinder.scale.set(baseScale, baseScale, baseScale * 0.82);
+            // 마스크 스케일도 동적으로 변경 (기존 내부 비율 유지)
+            occlusionCylinder.scale.set(currentScale, currentScale, currentScale * 0.82);
         }
     </script>
 </body>
