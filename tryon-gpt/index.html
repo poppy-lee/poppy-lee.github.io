@@ -2,8 +2,7 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <title>Hand Tracking Stage 1-2 Demo</title>
-    <!-- 레이아웃용 간단 스타일 -->
+    <title>Hand Tracking Stage 1-2 (Environment Camera)</title>
     <style>
       body {
         margin: 0;
@@ -40,9 +39,8 @@
         background: #000;
       }
 
-      /* 비디오는 화면에 안 보이고, MediaPipe Camera 유틸용으로만 사용 */
       #input_video {
-        display: none;
+        display: none; /* 디버깅용으로 보고 싶으면 block 처리 */
       }
 
       #output_canvas {
@@ -58,20 +56,13 @@
       }
     </style>
 
-    <!-- MediaPipe JS 라이브러리 (CDN) -->
-    <!-- Camera 유틸: getUserMedia + frame loop -->
-    <script
-      src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"
-      crossorigin="anonymous"
-    ></script>
-    <!-- 랜드마크/라인 그려주는 유틸 -->
-    <script
-      src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
-      crossorigin="anonymous"
-    ></script>
-    <!-- Hands 솔루션 -->
+    <!-- MediaPipe JS (CDN) -->
     <script
       src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
       crossorigin="anonymous"
     ></script>
   </head>
@@ -79,6 +70,7 @@
   <body>
     <h1>Hand Tracking Stage 1–2</h1>
     <div class="info">
+      후면카메라(environment) 기준<br />
       1단계: 웹캠 비디오 스트림 받기<br />
       2단계: 손 / 손목 랜드마크 추출 + 캔버스에 표시
     </div>
@@ -90,13 +82,11 @@
     <div class="status" id="status">초기화 중...</div>
 
     <script>
-      // DOM 요소 참조
       const videoElement = document.getElementById("input_video");
       const canvasElement = document.getElementById("output_canvas");
       const canvasCtx = canvasElement.getContext("2d");
       const statusElem = document.getElementById("status");
 
-      // 캔버스 크기를 비디오 해상도와 맞추기 위한 기본 값
       const VIDEO_WIDTH = 640;
       const VIDEO_HEIGHT = 480;
 
@@ -106,59 +96,67 @@
       // MediaPipe Hands 초기화
       const hands = new Hands({
         locateFile: (file) => {
-          // hands.wasm / 모델 파일 등 로딩 경로
           return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
         },
       });
 
-      // Hands 옵션 설정
       hands.setOptions({
-        maxNumHands: 2, // 최대 인식 손 개수
-        modelComplexity: 1, // 0 또는 1 (1이 더 정확하지만 무거움)
+        maxNumHands: 2,
+        modelComplexity: 1,
         minDetectionConfidence: 0.7,
         minTrackingConfidence: 0.7,
       });
 
-      // 결과 콜백
       hands.onResults(onResults);
-
-      // WebCam → MediaPipe Hands로 프레임 전달
-      let camera = null;
 
       async function init() {
         try {
           statusElem.textContent = "카메라 권한 요청 중...";
 
-          camera = new Camera(videoElement, {
-            onFrame: async () => {
-              // 매 프레임마다 Hands에 현재 비디오 프레임 전달
-              await hands.send({ image: videoElement });
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              width: VIDEO_WIDTH,
+              height: VIDEO_HEIGHT,
+              // 후면카메라 우선 사용
+              facingMode: { ideal: "environment" },
             },
-            width: VIDEO_WIDTH,
-            height: VIDEO_HEIGHT,
+            audio: false,
           });
 
-          await camera.start();
+          videoElement.srcObject = stream;
+
+          // 메타데이터 로드 후 재생
+          await videoElement.play();
+
           statusElem.textContent =
-            "손을 카메라에 비춰보세요 👋 (손목 좌표는 콘솔에 로그됩니다)";
+            "후면카메라 사용 중. 손을 카메라 쪽으로 비춰보세요 👋";
+          // 렌더 루프 시작
+          requestAnimationFrame(onFrame);
         } catch (e) {
           console.error(e);
           statusElem.textContent =
-            "카메라를 시작하는 도중 오류가 발생했습니다. (HTTPS/권한 확인 필요)";
+            "카메라를 시작하는 도중 오류가 발생했습니다. (HTTPS/권한/후면카메라 존재 여부 확인 필요)";
         }
       }
 
-      // Hands 결과 처리
+      // 매 프레임마다 비디오 → Hands
+      async function onFrame() {
+        if (videoElement.readyState === HTMLMediaElement.HAVE_ENOUGH_DATA) {
+          try {
+            await hands.send({ image: videoElement });
+          } catch (e) {
+            console.error("hands.send 에러:", e);
+          }
+        }
+        requestAnimationFrame(onFrame);
+      }
+
       function onResults(results) {
-        // 캔버스에 그리기 시작
+        // 캔버스 초기화
         canvasCtx.save();
         canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-        // 화면을 좌우 반전해서 "거울"처럼 보이게 하기
-        canvasCtx.translate(canvasElement.width, 0);
-        canvasCtx.scale(-1, 1);
-
-        // 비디오 프레임 그리기
+        // *후면카메라*이므로 거울처럼 좌우반전하지 않고 그대로 그림
         canvasCtx.drawImage(
           results.image,
           0,
@@ -167,7 +165,6 @@
           canvasElement.height
         );
 
-        // 손이 인식되면 landmarks를 그림
         if (
           results.multiHandLandmarks &&
           results.multiHandLandmarks.length > 0
@@ -175,18 +172,24 @@
           for (let i = 0; i < results.multiHandLandmarks.length; i++) {
             const landmarks = results.multiHandLandmarks[i];
 
-            // 손목(랜드마크 인덱스 0) 좌표 로그 (캔버스 기준 정규화 x,y,z)
+            // 손목 (landmark[0]) 정보 로그
             const wrist = landmarks[0];
-            // MediaPipe는 0~1 정규화 좌표, 여기서는 참고용으로 픽셀 좌표도 계산
-            const wristPixelX = (1 - wrist.x) * canvasElement.width; // 좌우 반전 고려
+            const wristPixelX = wrist.x * canvasElement.width;
             const wristPixelY = wrist.y * canvasElement.height;
 
             console.log(`Hand ${i} wrist:`, {
-              norm: { x: wrist.x, y: wrist.y, z: wrist.z },
-              pixel: { x: wristPixelX.toFixed(1), y: wristPixelY.toFixed(1) },
+              norm: {
+                x: wrist.x.toFixed(3),
+                y: wrist.y.toFixed(3),
+                z: wrist.z.toFixed(3),
+              },
+              pixel: {
+                x: wristPixelX.toFixed(1),
+                y: wristPixelY.toFixed(1),
+              },
             });
 
-            // 랜드마크 및 연결선 그리기 (미러링된 좌표계에서 그리므로 그대로 사용)
+            // 랜드마크 + 연결선 그림
             drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {
               color: "#00FFAA",
               lineWidth: 3,
@@ -202,7 +205,6 @@
         canvasCtx.restore();
       }
 
-      // 초기 시작
       init();
     </script>
   </body>
