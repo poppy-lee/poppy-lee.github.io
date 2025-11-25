@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AR Watch - Step 1 & 2: Hand Tracking</title>
+
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #1a1a1a;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        overflow: hidden;
+        font-family: sans-serif;
+      }
+
+      .container {
+        position: relative;
+        width: 1280px;
+        height: 720px;
+        max-width: 100%;
+        max-height: 100%;
+      }
+
+      /* 비디오는 숨기고 캔버스만 보여줍니다 (캔버스에 비디오+그림을 같이 그리기 때문) */
+      .input_video {
+        display: none;
+      }
+
+      /* 결과 화면 캔버스 */
+      .output_canvas {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        /* 거울 모드: 사용자가 보기에 자연스럽게 좌우 반전 */
+        transform: scaleX(-1);
+        border-radius: 12px;
+        background-color: #000;
+      }
+
+      .loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: white;
+        font-size: 1.5rem;
+        z-index: 10;
+        pointer-events: none;
+      }
+    </style>
+
+    <script
+      src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"
+      crossorigin="anonymous"
+    ></script>
+  </head>
+  <body>
+    <div class="container">
+      <div class="loading" id="loading-text">Loading Hand Tracking...</div>
+      <video class="input_video" playsinline></video>
+      <canvas class="output_canvas"></canvas>
+    </div>
+
+    <script>
+      // 1. DOM 요소 가져오기
+      const videoElement = document.getElementsByClassName("input_video")[0];
+      const canvasElement = document.getElementsByClassName("output_canvas")[0];
+      const canvasCtx = canvasElement.getContext("2d");
+      const loadingText = document.getElementById("loading-text");
+
+      // 캔버스 크기 설정을 위한 함수
+      function resizeCanvas() {
+        canvasElement.width = videoElement.videoWidth || 1280;
+        canvasElement.height = videoElement.videoHeight || 720;
+      }
+
+      // 2. MediaPipe Hands 결과 처리 함수 (매 프레임마다 호출됨)
+      function onResults(results) {
+        // 로딩 텍스트 숨기기
+        loadingText.style.display = "none";
+
+        // 캔버스 크기 동기화 (최초 실행 시 필요)
+        if (canvasElement.width !== videoElement.videoWidth) {
+          resizeCanvas();
+        }
+
+        // 캔버스 초기화 및 비디오 프레임 그리기
+        canvasCtx.save();
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        canvasCtx.drawImage(
+          results.image,
+          0,
+          0,
+          canvasElement.width,
+          canvasElement.height
+        );
+
+        // 손이 감지되었는지 확인
+        if (results.multiHandLandmarks) {
+          for (const landmarks of results.multiHandLandmarks) {
+            // A. 기본 뼈대 그리기 (디버깅용)
+            drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {
+              color: "#00FF00",
+              lineWidth: 2,
+            });
+            drawLandmarks(canvasCtx, landmarks, {
+              color: "#FF0000",
+              lineWidth: 1,
+              radius: 3,
+            });
+
+            // B. 시계 착용을 위한 핵심 랜드마크 시각화
+            // 0: Wrist (손목)
+            // 5: Index Finger MCP (검지 뿌리)
+            // 17: Pinky Finger MCP (새끼 뿌리)
+
+            const wrist = landmarks[0];
+            const indexMCP = landmarks[5];
+            const pinkyMCP = landmarks[17];
+
+            // 좌표 변환 (0~1 정규화 좌표 -> 픽셀 좌표)
+            const wX = wrist.x * canvasElement.width;
+            const wY = wrist.y * canvasElement.height;
+
+            // 1. 시계 위치 (손목) 하이라이트 (파란색 큰 원)
+            canvasCtx.beginPath();
+            canvasCtx.arc(wX, wY, 10, 0, 2 * Math.PI);
+            canvasCtx.fillStyle = "cyan";
+            canvasCtx.fill();
+            canvasCtx.strokeStyle = "white";
+            canvasCtx.stroke();
+
+            // 2. 손목 너비 가이드 (검지 뿌리 ~ 새끼 뿌리 연결선)
+            // 추후 이 거리를 기반으로 시계 크기(Scale)를 조절합니다.
+            const iX = indexMCP.x * canvasElement.width;
+            const iY = indexMCP.y * canvasElement.height;
+            const pX = pinkyMCP.x * canvasElement.width;
+            const pY = pinkyMCP.y * canvasElement.height;
+
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(iX, iY);
+            canvasCtx.lineTo(pX, pY);
+            canvasCtx.strokeStyle = "yellow";
+            canvasCtx.lineWidth = 4;
+            canvasCtx.stroke();
+
+            // 텍스트 표시
+            canvasCtx.font = "20px Arial";
+            canvasCtx.fillStyle = "white";
+            canvasCtx.fillText("Wrist Target", wX + 15, wY);
+            canvasCtx.font = "16px Arial";
+            canvasCtx.fillStyle = "yellow";
+            canvasCtx.fillText("Scale Reference", iX, iY - 10);
+          }
+        }
+        canvasCtx.restore();
+      }
+
+      // 3. MediaPipe Hands 초기화 설정
+      const hands = new Hands({
+        locateFile: (file) => {
+          return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        },
+      });
+
+      hands.setOptions({
+        maxNumHands: 1, // 시계는 보통 한 손에 차므로 1개만 인식
+        modelComplexity: 1, // 0: Lite, 1: Full (정확도 위해 1 추천)
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      });
+
+      hands.onResults(onResults);
+
+      // 4. 카메라 설정 및 시작
+      const camera = new Camera(videoElement, {
+        onFrame: async () => {
+          await hands.send({ image: videoElement });
+        },
+        width: 1280,
+        height: 720,
+      });
+
+      camera.start();
+    </script>
+  </body>
+</html>
